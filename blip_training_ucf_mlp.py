@@ -2,7 +2,7 @@
 """
 Local runner for the reviewer-requested UCF101 capacity-control baseline:
 
-    frozen DINOv2-Large + MLP head with approximately the same trainable
+    frozen BLIP-2 vision encoder + MLP head with approximately the same trainable
     parameter count as DREAM.
 
 Expected local data layout:
@@ -54,7 +54,7 @@ except ImportError:
     cv2 = None
 
 try:
-    from transformers import Dinov2Model
+    from transformers import Blip2VisionModel
 except ImportError as exc:
     raise SystemExit(
         "Missing dependency: transformers. Install it with:\n"
@@ -63,15 +63,15 @@ except ImportError as exc:
 
 
 DREAM_TRAINABLE_PARAMS = 128_911_461
-DEFAULT_HIDDEN_DIM = 10804
+DEFAULT_HIDDEN_DIM = 10624
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset-dir", required=True, help="Path to UCF101TrainTestSplits-RecognitionTask")
     parser.add_argument("--video-dir", required=True, help="Path to UCF-101 video folder")
-    parser.add_argument("--output-dir", default="outputs/runs/dinov2_large_same_params_mlp")
-    parser.add_argument("--model-name", default="facebook/dinov2-large")
+    parser.add_argument("--output-dir", default="outputs/runs/blip2_vision_same_params_mlp")
+    parser.add_argument("--model-name", default="Salesforce/blip2-flan-t5-xl")
     parser.add_argument("--cache-dir", default=None)
     parser.add_argument("--frames-per-clip", type=int, default=8)
     parser.add_argument("--batch-size", type=int, default=4)
@@ -216,21 +216,22 @@ class UCFDataset(torch.utils.data.Dataset):
         return imgs, label
 
 
-class DINOv2LargeSameParamsMLP(nn.Module):
-    def __init__(self, n_class=101, hidden_dim=DEFAULT_HIDDEN_DIM, model_name="facebook/dinov2-large", cache_dir=None):
+class BLIP2VisionSameParamsMLP(nn.Module):
+    def __init__(self, n_class=101, hidden_dim=DEFAULT_HIDDEN_DIM, model_name="Salesforce/blip2-flan-t5-xl", cache_dir=None):
         super().__init__()
 
         kwargs = {}
         if cache_dir:
             kwargs["cache_dir"] = cache_dir
-        self.dino = Dinov2Model.from_pretrained(model_name, **kwargs)
-        self.dino.eval()
+        self.blip = Blip2VisionModel.from_pretrained(model_name, **kwargs)
+        self.blip.eval()
 
-        for param in self.dino.parameters():
+        for param in self.blip.parameters():
             param.requires_grad = False
 
+        self.feature_dim = getattr(self.blip.config, "hidden_size", 1408)
         self.mlp = nn.Sequential(
-            nn.Linear(1024, hidden_dim),
+            nn.Linear(self.feature_dim, hidden_dim),
             nn.GELU(),
             nn.Dropout(0.1),
             nn.Linear(hidden_dim, hidden_dim),
@@ -244,7 +245,7 @@ class DINOv2LargeSameParamsMLP(nn.Module):
         inp = inp.transpose(1, 2).reshape(bsz * frames, channels, height, width)
 
         with torch.no_grad():
-            feats = self.dino(inp).last_hidden_state[:, 0, :]
+            feats = self.blip(pixel_values=inp).last_hidden_state[:, 0, :]
 
         feats = feats.reshape(bsz, frames, -1).mean(dim=1)
         return self.mlp(feats)
@@ -275,7 +276,7 @@ def move_batch_to_device(video_data, labels, device):
 
 def train_step(model, loader, epoch, optimizer, scheduler, loss_criterion, device):
     model.train()
-    model.dino.eval()
+    model.blip.eval()
 
     total_loss = 0.0
     top1_sum = 0.0
@@ -387,7 +388,7 @@ def main():
         pin_memory=pin_memory,
     )
 
-    model = DINOv2LargeSameParamsMLP(
+    model = BLIP2VisionSameParamsMLP(
         args.num_classes,
         hidden_dim=args.hidden_dim,
         model_name=args.model_name,
@@ -456,7 +457,7 @@ def main():
 
         if val_top1 > best_top1:
             best_top1 = val_top1
-            checkpoint_path = checkpoint_dir / f"dinov2_large_same_params_mlp_{timestamp}_epoch_{epoch}.pth"
+            checkpoint_path = checkpoint_dir / f"blip2_vision_same_params_mlp_{timestamp}_epoch_{epoch}.pth"
             print(f"Saving model at epoch {epoch}: {checkpoint_path}")
             torch.save(model.state_dict(), checkpoint_path)
 
