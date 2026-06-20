@@ -37,7 +37,7 @@ import torchvision
 import torchvision.transforms as tv
 
 try:
-    from transformers import Blip2VisionModel
+    from transformers import Blip2Model
 except ImportError as exc:
     raise SystemExit(
         "Missing dependency: transformers. Install it with:\n"
@@ -120,13 +120,15 @@ class BLIP2VisionSameParamsMLP(nn.Module):
         kwargs = {}
         if cache_dir:
             kwargs["cache_dir"] = cache_dir
-        self.blip = Blip2VisionModel.from_pretrained(model_name, **kwargs)
+        self.blip = Blip2Model.from_pretrained(model_name, **kwargs)
+        self.blip.language_model = None
+        self.blip.qformer = None
         self.blip.eval()
 
         for param in self.blip.parameters():
             param.requires_grad = False
 
-        feature_dim = getattr(self.blip.config, "hidden_size", BLIP2_FEATURE_DIM)
+        feature_dim = self.blip.config.vision_config.hidden_size
         self.mlp = nn.Sequential(
             nn.Linear(feature_dim, hidden_dim),
             nn.GELU(),
@@ -139,7 +141,7 @@ class BLIP2VisionSameParamsMLP(nn.Module):
 
     def forward(self, inp):
         with torch.no_grad():
-            feats = self.blip(pixel_values=inp).last_hidden_state[:, 0, :]
+            feats = self.blip.get_image_features(inp).last_hidden_state[:, 0, :]
         return self.mlp(feats)
 
 

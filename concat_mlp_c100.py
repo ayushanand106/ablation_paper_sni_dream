@@ -37,7 +37,7 @@ import torchvision
 import torchvision.transforms as tv
 
 try:
-    from transformers import Dinov2Model, Blip2VisionModel
+    from transformers import Dinov2Model, Blip2Model
 except ImportError as exc:
     raise SystemExit(
         "Missing dependency: transformers. Install it with:\n"
@@ -122,7 +122,9 @@ class ConcatDinoBLIPSameParamsMLP(nn.Module):
         if cache_dir:
             kwargs["cache_dir"] = cache_dir
         self.dino = Dinov2Model.from_pretrained(dino_model_name, **kwargs)
-        self.blip = Blip2VisionModel.from_pretrained(blip_model_name, **kwargs)
+        self.blip = Blip2Model.from_pretrained(blip_model_name, **kwargs)
+        self.blip.language_model = None
+        self.blip.qformer = None
         self.dino.eval()
         self.blip.eval()
 
@@ -132,7 +134,7 @@ class ConcatDinoBLIPSameParamsMLP(nn.Module):
             param.requires_grad = False
 
         self.dino_dim = self.dino.config.hidden_size
-        self.blip_dim = getattr(self.blip.config, "hidden_size", 1408)
+        self.blip_dim = self.blip.config.vision_config.hidden_size
         self.feature_dim = self.dino_dim + self.blip_dim
         self.mlp = nn.Sequential(
             nn.Linear(self.feature_dim, hidden_dim),
@@ -150,7 +152,7 @@ class ConcatDinoBLIPSameParamsMLP(nn.Module):
 
         with torch.no_grad():
             dino_feats = self.dino(inp).last_hidden_state[:, 0, :]
-            blip_feats = self.blip(pixel_values=inp).last_hidden_state[:, 0, :]
+            blip_feats = self.blip.get_image_features(inp).last_hidden_state[:, 0, :]
 
         feats = torch.cat([dino_feats, blip_feats], dim=-1)
         feats = feats.reshape(bsz, frames, -1).mean(dim=1)
