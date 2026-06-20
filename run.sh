@@ -3,6 +3,11 @@ set -euo pipefail
 
 cd /Users/ayush.anand/projects/paper
 mkdir -p logs
+aria2c -x 16 -s 16 https://www.crcv.ucf.edu/data/UCF101/UCF101.rar --check-certificate=false
+
+unrar x UCF101.rar && rm UCF101.rar
+
+git clone https://github.com/brahmesh001/UCF101_Splits
 
 uv run python dino_training_ucf_mlp.py \
   --dataset-dir UCF101_Splits/UCF101TrainTestSplits-RecognitionTask \
