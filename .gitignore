@@ -1,0 +1,44 @@
+# macOS
+.DS_Store
+
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Virtual environments
+.venv/
+
+# Local datasets and downloaded split archives/repos
+UCF-101/
+UCF101_Splits/
+UCF101TrainTestSplits-RecognitionTask/
+
+# Training outputs
+outputs/runs/
+checkpoints/
+*.ckpt
+*.pth
+*.pt
+*.safetensors
+
+# Logs and local run metadata
+*.log
+*.out
+nohup.out
+wandb/
+runs/
+tensorboard/
+
+# Model/data caches
+.cache/
+cache/
+hf_cache/
+huggingface/
