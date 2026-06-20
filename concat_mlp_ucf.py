@@ -477,7 +477,8 @@ def main():
         if val_top1 > best_top1:
             best_top1 = val_top1
             checkpoint_path = checkpoint_dir / f"ucf_concat_dinov2_blip2_same_params_mlp_{timestamp}_epoch_{epoch}.pth"
-            print(f"Saving model at epoch {epoch}: {checkpoint_path}")
+            print(f"Best validation Top-1 improved to {best_top1:.2f}% at epoch {epoch}")
+            print(f"Saving best model: {checkpoint_path}")
             torch.save(model.state_dict(), checkpoint_path)
 
     print(f"Best validation Top-1: {best_top1:.2f}%")
